@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "A Django admin Redis monitoring dashboard with key exploration, live charts, and multi-connection support."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Kaushal Dhungel" },
+]
 keywords = [
     "django",
     "redis",
@@ -40,6 +44,11 @@ dependencies = [
     "Django>=3.2",
     "redis>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Kaushal-Dhungel/redis-metrics"
+Repository = "https://github.com/Kaushal-Dhungel/redis-metrics"
+Issues = "https://github.com/Kaushal-Dhungel/redis-metrics/issues"
 
 [project.optional-dependencies]
 dev = [

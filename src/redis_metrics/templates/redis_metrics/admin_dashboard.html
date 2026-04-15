@@ -1,0 +1,412 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% include "redis_metrics/partials/styles.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="rm-shell">
+    <div class="rm-toolbar">
+        <div class="rm-toolbar-title">
+            <span>Redis Metrics</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-muted">{{ connection.label }}</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-badge {{ health.state }}">{{ health.state|title }}</span>
+        </div>
+        <div class="rm-actions">
+            <form method="get" class="rm-form">
+                <select name="connection" class="rm-select">
+                    {% for item in connections %}
+                    <option value="{{ item.name }}" {% if item.name == connection.name or item.name == selected_connection %}selected{% endif %}>{{ item.label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="rm-btn soft">Switch</button>
+            </form>
+            <span class="rm-sep">|</span>
+            <a href="?connection={{ connection.name }}" class="rm-btn secondary">Refresh</a>
+            <a href="{{ key_explorer_url }}?connection={{ connection.name }}" class="rm-btn secondary">Key Explorer</a>
+        </div>
+    </div>
+
+    {% if redis_ok %}
+    <section class="rm-grid metrics">
+        <div class="rm-stat-row">
+            {% for item in metrics %}
+            <span class="rm-stat-inline" {% if item.label == "Used Memory" or item.label == "Ops / Sec" or item.label == "Hit Rate" or item.label == "Connected Clients" %}data-live-metric="{{ item.label }}"{% endif %}>
+                <span class="rm-kicker">{{ item.label }}</span>
+                <span class="rm-metric">{{ item.value }}</span>
+            </span>
+            {% if not forloop.last %}
+            <span class="rm-sep">|</span>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="rm-panel rm-card rm-stack" style="margin-bottom:10px;">
+        <div class="rm-spread">
+            <strong>Performance</strong>
+            <div class="rm-actions">
+                <label class="rm-toggle">
+                    <input type="checkbox" id="rm-live-toggle">
+                    <span>Live</span>
+                </label>
+                <select id="rm-live-interval" class="rm-select">
+                    <option value="5">5s</option>
+                    <option value="10" selected>10s</option>
+                    <option value="15">15s</option>
+                    <option value="30">30s</option>
+                    <option value="60">60s</option>
+                </select>
+            </div>
+        </div>
+        <div class="rm-muted" id="rm-live-status">Update: manual</div>
+        <div class="rm-dashboard-columns">
+            <div class="rm-column">
+                {% for series in timeseries %}
+                {% if series.key != "hit_rate" %}
+                <div class="rm-chart-card" data-live-series="{{ series.key }}" data-series-label="{{ series.label }}" data-series-value="{{ series.value }}">
+                    <div class="rm-spread">
+                        <strong>{{ series.label }}</strong>
+                        <span class="rm-muted" data-live-value>{{ series.value }}</span>
+                    </div>
+                    <div class="rm-chart-shell" data-chart-shell>
+                        <svg viewBox="0 0 680 220" preserveAspectRatio="none" aria-hidden="true"></svg>
+                        <div class="rm-chart-tooltip" data-chart-tooltip></div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <div class="rm-column">
+                {% for series in timeseries %}
+                {% if series.key == "hit_rate" %}
+                <div class="rm-chart-card" data-live-series="{{ series.key }}" data-series-label="{{ series.label }}" data-series-value="{{ series.value }}">
+                    <div class="rm-spread">
+                        <strong>{{ series.label }}</strong>
+                        <span class="rm-muted" data-live-value>{{ series.value }}</span>
+                    </div>
+                    <div class="rm-chart-shell" data-chart-shell>
+                        <svg viewBox="0 0 680 220" preserveAspectRatio="none" aria-hidden="true"></svg>
+                        <div class="rm-chart-tooltip" data-chart-tooltip></div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+
+                <section class="rm-panel rm-card rm-stack">
+                    <strong>Redis Health</strong>
+                    <table class="rm-health-table">
+                        {% for check in health.checks %}
+                        <tr>
+                            <td class="rm-health-name">{{ check.label }}</td>
+                            <td class="rm-health-detail">{{ check.detail }}</td>
+                            <td style="text-align:right;"><span class="rm-badge {{ check.state }}">{{ check.state|title }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </section>
+            </div>
+        </div>
+    </section>
+
+    <section class="rm-grid triple">
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Key Patterns</strong>
+            <div class="rm-compact-grid">
+                <div class="rm-compact-item"><div class="rm-muted">Configured</div><strong>{{ prefix_summary.configured_key_prefix }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Detected</div><strong>{{ prefix_summary.detected_key_prefix }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Entries</div><strong>{{ prefix_summary.entry_count }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Avg TTL</div><strong>{{ prefix_summary.average_ttl_label }}</strong></div>
+            </div>
+            {% if prefix_summary.most_frequent_prefixes %}
+            <div class="rm-list">
+                {% for item in prefix_summary.most_frequent_prefixes %}
+                <div class="rm-list-item">
+                    <strong>{{ item.name }}</strong>
+                    <span class="rm-pill">{{ item.count }} • {{ item.share }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </article>
+
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Expiry & Eviction</strong>
+            <div class="rm-compact-grid">
+                <div class="rm-compact-item"><div class="rm-muted">Expired</div><strong>{{ eviction.expired_keys }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Evicted</div><strong>{{ eviction.evicted_keys }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Policy</div><strong>{{ eviction.maxmemory_policy }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Defrag</div><strong>{{ eviction.active_defrag }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Sample</div><strong>{{ sample_size }} keys</strong></div>
+            </div>
+        </article>
+
+        {% if celery %}
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Celery Broker</strong>
+            <div class="rm-compact-grid">
+                <div class="rm-compact-item"><div class="rm-muted">Queues</div><strong>{{ celery.queue_count }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Queued</div><strong>{{ celery.total_queue_depth }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Scheduled</div><strong>{{ celery.scheduled_tasks }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Reserved</div><strong>{{ celery.reserved_tasks }}</strong></div>
+                <div class="rm-compact-item"><div class="rm-muted">Results</div><strong>{{ celery.result_keys }}</strong></div>
+            </div>
+            {% if celery.queues %}
+            <div class="rm-list">
+                {% for queue in celery.queues %}
+                <div class="rm-list-item">
+                    <strong><code>{{ queue.name }}</code></strong>
+                    <span class="rm-pill">{{ queue.size }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </article>
+        {% endif %}
+    </section>
+
+    <section class="rm-grid triple">
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Hot Keys</strong>
+            {% if key_insights.most_requested %}
+            <div class="rm-list">
+                {% for item in key_insights.most_requested %}
+                <div class="rm-list-item">
+                    <div>
+                        <strong><code>{{ item.key }}</code></strong>
+                        <div class="rm-muted">{{ item.detail }}</div>
+                    </div>
+                    <span class="rm-pill">{{ item.score }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="rm-empty">No usage insight.</div>
+            {% endif %}
+        </article>
+
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Key Size</strong>
+            <div class="rm-muted">Sampled memory {{ key_insights.size_analysis.sampled_memory_human }}</div>
+            {% if key_insights.size_analysis.largest_keys %}
+            <div class="rm-list">
+                {% for item in key_insights.size_analysis.largest_keys %}
+                <div class="rm-list-item">
+                    <div>
+                        <strong><code>{{ item.key }}</code></strong>
+                        <div class="rm-muted">{{ item.type }}</div>
+                    </div>
+                    <span class="rm-pill">{{ item.memory_human }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="rm-empty">No memory analysis.</div>
+            {% endif %}
+        </article>
+
+        <article class="rm-panel rm-card rm-stack">
+            <strong>Stale Keys</strong>
+            {% if key_insights.useless_keys %}
+            <div class="rm-list">
+                {% for item in key_insights.useless_keys %}
+                <div class="rm-list-item">
+                    <div>
+                        <strong><code>{{ item.key }}</code></strong>
+                        <div class="rm-muted">{{ item.detail }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="rm-empty">No stale-key signal.</div>
+            {% endif %}
+        </article>
+
+        <article class="rm-panel rm-card rm-stack">
+            <div class="rm-spread">
+                <strong>Slow Queries</strong>
+                <span class="rm-pill">{{ slowlog|length }}</span>
+            </div>
+            {% if slowlog %}
+            <table class="rm-table">
+                <thead>
+                    <tr><th>ID</th><th>Started</th><th>Duration</th><th>Command</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in slowlog %}
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.started_at }}</td>
+                        <td>{{ item.duration_ms }} ms</td>
+                        <td><code>{{ item.command }}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="rm-empty">No slow log entries.</div>
+            {% endif %}
+        </article>
+    </section>
+    {% else %}
+    <section class="rm-panel rm-card">
+        <strong>Redis could not be reached.</strong>
+        <div class="rm-muted">{{ error }}</div>
+    </section>
+    {% endif %}
+</div>
+{{ live_chart_seed|json_script:"rm-live-seed" }}
+<script>
+(() => {
+    const seedNode = document.getElementById("rm-live-seed");
+    const toggle = document.getElementById("rm-live-toggle");
+    const intervalSelect = document.getElementById("rm-live-interval");
+    const statusNode = document.getElementById("rm-live-status");
+    if (!seedNode || !toggle || !intervalSelect || !statusNode) return;
+
+    const endpoint = "{{ live_metrics_url }}?connection={{ connection.name|urlencode }}";
+    const state = {
+        seed: JSON.parse(seedNode.textContent || "[]"),
+        timer: null,
+    };
+
+    function getSeriesPoints(key) {
+        return state.seed.map((item) => ({
+            x: item.label,
+            y: key === "memory" ? Number(item.memory || 0) : key === "ops" ? Number(item.ops || 0) : Number(item.hit_rate || 0),
+        }));
+    }
+
+    function pathFor(points, width, height, left, top, innerWidth, innerHeight) {
+        if (!points.length) return {line: "", area: ""};
+        const maxY = Math.max(...points.map((p) => p.y), 1);
+        const stepX = points.length > 1 ? innerWidth / (points.length - 1) : 0;
+        const coords = points.map((point, index) => {
+            const x = left + stepX * index;
+            const y = top + innerHeight - ((point.y / maxY) * innerHeight);
+            return {x, y, label: point.x, value: point.y};
+        });
+        const line = coords.map((c, index) => `${index === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" ");
+        const area = `${line} L ${coords[coords.length - 1].x} ${top + innerHeight} L ${coords[0].x} ${top + innerHeight} Z`;
+        return {line, area, coords, maxY};
+    }
+
+    function renderChart(container, points, label, displayValue) {
+        const svg = container.querySelector("svg");
+        const tooltip = container.querySelector("[data-chart-tooltip]");
+        if (!svg) return;
+        const width = 680;
+        const height = 220;
+        const left = 84;
+        const right = 6;
+        const top = 16;
+        const bottom = 44;
+        const innerWidth = width - left - right;
+        const innerHeight = height - top - bottom;
+        const geometry = pathFor(points, width, height, left, top, innerWidth, innerHeight);
+        const yMax = geometry.maxY || 1;
+        const yMid = yMax / 2;
+        const xStart = points[0] ? points[0].x : "";
+        const xEnd = points[points.length - 1] ? points[points.length - 1].x : "";
+        const xTitle = "Time";
+
+        svg.innerHTML = `
+            <line x1="${left}" y1="${top}" x2="${left}" y2="${top + innerHeight}" class="rm-axis"></line>
+            <line x1="${left}" y1="${top + innerHeight}" x2="${left + innerWidth}" y2="${top + innerHeight}" class="rm-axis"></line>
+            <line x1="${left}" y1="${top}" x2="${left + innerWidth}" y2="${top}" class="rm-gridline"></line>
+            <line x1="${left}" y1="${top + innerHeight/2}" x2="${left + innerWidth}" y2="${top + innerHeight/2}" class="rm-gridline"></line>
+            <path d="${geometry.area || ""}" class="rm-chart-area"></path>
+            <path d="${geometry.line || ""}" class="rm-chart-line"></path>
+            <text x="${left - 8}" y="${top + 6}" text-anchor="end" class="rm-chart-label">${yMax.toFixed(1)}</text>
+            <text x="${left - 8}" y="${top + innerHeight/2 + 4}" text-anchor="end" class="rm-chart-label">${yMid.toFixed(1)}</text>
+            <text x="${left - 8}" y="${top + innerHeight}" text-anchor="end" class="rm-chart-label">0</text>
+            <text x="${left}" y="${height - 10}" class="rm-chart-label">${xStart}</text>
+            <text x="${left + innerWidth}" y="${height - 10}" text-anchor="end" class="rm-chart-label">${xEnd}</text>
+            <text x="${left + innerWidth / 2}" y="${height - 4}" text-anchor="middle" class="rm-axis-title">${xTitle}</text>
+        `;
+
+        (geometry.coords || []).forEach((point) => {
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", point.x);
+            circle.setAttribute("cy", point.y);
+            circle.setAttribute("r", 3.5);
+            circle.setAttribute("class", "rm-point");
+            circle.addEventListener("mouseenter", () => {
+                tooltip.style.display = "block";
+                tooltip.textContent = `${label}: ${point.value} @ ${point.label}`;
+                tooltip.style.left = `${((point.x / width) * 100).toFixed(2)}%`;
+                tooltip.style.top = `${Math.max(point.y - 18, 10)}px`;
+            });
+            circle.addEventListener("mouseleave", () => {
+                tooltip.style.display = "none";
+            });
+            svg.appendChild(circle);
+        });
+    }
+
+    function renderAll(seriesPayload) {
+        seriesPayload.forEach((series) => {
+            const card = document.querySelector(`[data-live-series="${series.key}"]`);
+            if (!card) return;
+            const valueNode = card.querySelector("[data-live-value]");
+            if (valueNode) valueNode.textContent = series.value;
+            renderChart(card.querySelector("[data-chart-shell]"), getSeriesPoints(series.key), series.label, series.value);
+        });
+    }
+
+    function updateMetrics(metricMap, healthState, timestamp) {
+        Object.entries(metricMap).forEach(([label, value]) => {
+            const node = document.querySelector(`[data-live-metric="${label}"] .rm-metric`);
+            if (node) node.textContent = value;
+        });
+        statusNode.textContent = toggle.checked ? `Update: live ${intervalSelect.value}s | ${timestamp} | ${healthState}` : "Update: manual";
+    }
+
+    async function tick() {
+        try {
+            const response = await fetch(endpoint, {headers: {"X-Requested-With": "XMLHttpRequest"}});
+            const payload = await response.json();
+            const snapshot = {
+                label: payload.timestamp ? payload.timestamp.slice(0, 5) : "",
+                memory: Number((payload.series.find((item) => item.key === "memory") || {}).raw_value || 0),
+                ops: Number((payload.series.find((item) => item.key === "ops") || {}).raw_value || 0),
+                hit_rate: Number((payload.series.find((item) => item.key === "hit_rate") || {}).raw_value || 0),
+            };
+            state.seed.push(snapshot);
+            state.seed = state.seed.slice(-20);
+            renderAll(payload.series || []);
+            updateMetrics(payload.metrics || {}, payload.health_state || "unknown", payload.timestamp || "");
+        } catch (_error) {
+            statusNode.textContent = "Live update failed";
+        }
+    }
+
+    function stop() {
+        if (state.timer) clearInterval(state.timer);
+        state.timer = null;
+    }
+
+    function start() {
+        stop();
+        if (!toggle.checked) {
+            statusNode.textContent = "Update: manual";
+            return;
+        }
+        tick();
+        state.timer = setInterval(tick, Number(intervalSelect.value) * 1000);
+    }
+
+    renderAll(Array.from(document.querySelectorAll("[data-live-series]")).map((node) => ({
+        key: node.dataset.liveSeries,
+        label: node.dataset.seriesLabel,
+        value: node.dataset.seriesValue,
+    })));
+    toggle.addEventListener("change", start);
+    intervalSelect.addEventListener("change", start);
+})();
+</script>
+{% endblock %}

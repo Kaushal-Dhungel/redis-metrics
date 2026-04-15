@@ -1,0 +1,49 @@
+# Local demo / sandbox project
+test_app
+Agents
+/test_project/
+/test_project/**
+
+
+# Python cache / compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / coverage / type-check caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Local databases / logs / env files
+*.sqlite3
+*.log
+*.env
+.env
+.env.*
+
+# Editor / OS files
+.DS_Store
+.idea/
+.vscode/

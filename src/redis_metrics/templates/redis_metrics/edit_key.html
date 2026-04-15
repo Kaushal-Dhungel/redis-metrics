@@ -1,0 +1,61 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% include "redis_metrics/partials/styles.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="rm-shell">
+    <div class="rm-toolbar">
+        <div class="rm-toolbar-title">
+            <span>Edit Key</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-muted">{{ connection.label }}</span>
+        </div>
+        <div class="rm-actions">
+            <a href="{{ key_explorer_url }}?connection={{ connection.name }}" class="rm-btn secondary">Back</a>
+        </div>
+    </div>
+
+    <section class="rm-grid double">
+        <article class="rm-panel rm-card">
+            <table class="rm-table">
+                <tbody>
+                    <tr><th>Key</th><td><code>{{ key_data.key }}</code></td></tr>
+                    <tr><th>Type</th><td>{{ key_data.type }}</td></tr>
+                    <tr><th>TTL</th><td>{{ key_data.ttl_label }}</td></tr>
+                    <tr><th>Size</th><td>{{ key_data.memory_human }}</td></tr>
+                    <tr><th>Idle</th><td>{{ key_data.idle_label }}</td></tr>
+                    <tr><th>Stored As</th><td>{{ key_data.value_format }}</td></tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article class="rm-panel rm-card">
+            {% if key_data.value %}
+            <div class="rm-stack" style="margin-bottom:10px;">
+                <strong>Current Value</strong>
+                <div class="rm-empty"><code>{{ key_data.value_display }}</code></div>
+            </div>
+            {% endif %}
+
+            {% if key_data.is_editable %}
+            <form method="post" class="rm-stack">
+                {% csrf_token %}
+                <input type="hidden" name="connection" value="{{ connection.name }}">
+                <input type="hidden" name="key" value="{{ key_data.key }}">
+                <input type="hidden" name="serializer" value="{{ key_data.serializer }}">
+                <textarea id="value" name="value" class="rm-textarea">{{ key_data.value }}</textarea>
+                <div class="rm-actions">
+                    <button type="submit" class="rm-btn">Save</button>
+                    <a href="{{ key_explorer_url }}?connection={{ connection.name }}" class="rm-btn secondary">Cancel</a>
+                </div>
+            </form>
+            {% else %}
+            <div class="rm-empty">This value can be viewed only. Binary payloads are not edited.</div>
+            {% endif %}
+        </article>
+    </section>
+</div>
+{% endblock %}

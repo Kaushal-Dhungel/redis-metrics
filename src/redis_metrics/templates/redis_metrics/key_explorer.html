@@ -1,0 +1,112 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% include "redis_metrics/partials/styles.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="rm-shell">
+    <div class="rm-toolbar">
+        <div class="rm-toolbar-title">
+            <span>Key Explorer</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-muted">{{ connection.label }}</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-muted">{{ total_count }} keys</span>
+            <span class="rm-sep">|</span>
+            <span class="rm-muted">{{ pattern }}</span>
+        </div>
+        <div class="rm-actions">
+            <a href="{{ dashboard_url }}?connection={{ connection.name }}" class="rm-btn secondary">Dashboard</a>
+        </div>
+    </div>
+
+    <section class="rm-panel rm-card rm-stack" style="margin-bottom:10px;">
+        <form method="get" class="rm-form">
+            <select name="connection" class="rm-select">
+                {% for item in connections %}
+                <option value="{{ item.name }}" {% if item.name == connection.name %}selected{% endif %}>{{ item.label }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Search keys or pattern" class="rm-input" />
+            <button type="submit" class="rm-btn">Search</button>
+            <a href="{{ key_explorer_url }}?connection={{ connection.name }}" class="rm-btn secondary">Reset</a>
+        </form>
+        {% if total_count %}
+        <div class="rm-actions">
+            <form method="post" action="{% url 'admin:redis_metrics_delete_pattern' %}">
+                {% csrf_token %}
+                <input type="hidden" name="connection" value="{{ connection.name }}">
+                <input type="hidden" name="q" value="{{ search_query }}">
+                <button type="submit" class="rm-btn soft" onclick="return confirm('Delete the matching keys on this connection?');">Clear Match</button>
+            </form>
+            <form method="post" action="{% url 'admin:redis_metrics_clear_connection' %}">
+                {% csrf_token %}
+                <input type="hidden" name="connection" value="{{ connection.name }}">
+                <button type="submit" class="rm-btn warn" onclick="return confirm('Delete all sampled keys on this Redis connection? This action cannot be undone.');">Clear Connection</button>
+            </form>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="rm-panel rm-card">
+        <table class="rm-table">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>Type</th>
+                    <th>TTL</th>
+                    <th>Size</th>
+                    <th>Idle</th>
+                    <th>Value</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in results %}
+                <tr>
+                    <td><code>{{ item.key }}</code><br><span class="rm-muted">{{ item.prefix_group }}</span></td>
+                    <td>{{ item.type }}</td>
+                    <td>{{ item.ttl_label }}</td>
+                    <td>{{ item.memory_human }}</td>
+                    <td>{{ item.idle_label }}</td>
+                    <td>{{ item.preview }}</td>
+                    <td>
+                        <div class="rm-actions">
+                            <a href="{% url 'admin:redis_metrics_edit_key' %}?connection={{ connection.name }}&key={{ item.key|urlencode }}" class="rm-btn soft">View</a>
+                            <form method="post" action="{% url 'admin:redis_metrics_delete_key' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="connection" value="{{ connection.name }}">
+                                <input type="hidden" name="key" value="{{ item.key }}">
+                                <input type="hidden" name="q" value="{{ search_query }}">
+                                <input type="hidden" name="page" value="{{ page }}">
+                                <button type="submit" class="rm-btn secondary" onclick="return confirm('Delete this key?');">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7"><div class="rm-empty">No keys matched the current search.</div></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if total_pages > 1 %}
+        <div class="rm-toolbar" style="margin-top:10px;">
+            <div class="rm-muted">Page {{ page }} of {{ total_pages }}</div>
+            <div class="rm-actions">
+                {% if has_prev %}
+                <a class="rm-btn secondary" href="?connection={{ connection.name }}&q={{ search_query|urlencode }}&page={{ prev_page }}">Previous</a>
+                {% endif %}
+                {% if has_next %}
+                <a class="rm-btn secondary" href="?connection={{ connection.name }}&q={{ search_query|urlencode }}&page={{ next_page }}">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

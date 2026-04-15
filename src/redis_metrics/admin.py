@@ -220,10 +220,46 @@ class RedisMetricsAdminSite:
 
 redis_metrics_admin = RedisMetricsAdminSite()
 original_get_urls = admin.site.get_urls
+original_get_app_list = admin.site.get_app_list
+
+
+def build_redis_metrics_app_entry():
+    dashboard_url = reverse("admin:redis_metrics_dashboard")
+    return {
+        "name": "Redis Metrics",
+        "app_label": "redis_metrics",
+        "app_url": dashboard_url,
+        "has_module_perms": True,
+        "models": [
+            {
+                "name": "Dashboard",
+                "object_name": "RedisMetricsDashboard",
+                "perms": {"view": True},
+                "admin_url": dashboard_url,
+                "add_url": None,
+                "view_only": True,
+            }
+        ],
+    }
 
 
 def get_urls():
     return redis_metrics_admin.get_urls() + original_get_urls()
 
 
+def get_app_list(request, app_label=None):
+    app_list = original_get_app_list(request, app_label)
+    redis_metrics_entry = build_redis_metrics_app_entry()
+
+    if app_label and app_label != redis_metrics_entry["app_label"]:
+        return app_list
+
+    if not any(app["app_label"] == redis_metrics_entry["app_label"] for app in app_list):
+        app_list.append(redis_metrics_entry)
+        app_list.sort(key=lambda item: item["name"].lower())
+
+    return app_list
+
+
 admin.site.get_urls = get_urls
+admin.site.get_app_list = get_app_list

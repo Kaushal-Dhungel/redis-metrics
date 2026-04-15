@@ -188,3 +188,16 @@ class RedisAdminTests(TestCase):
                 "series": [],
             },
         )
+
+    def test_admin_app_list_includes_redis_metrics_dashboard_link(self):
+        request = self.factory.get("/admin/")
+        request.user = self.user
+
+        app_list = self.admin_site.get_app_list(request)
+        redis_metrics_app = next((app for app in app_list if app["app_label"] == "redis_metrics"), None)
+
+        self.assertIsNotNone(redis_metrics_app)
+        self.assertEqual(redis_metrics_app["name"], "Redis Metrics")
+        self.assertEqual(redis_metrics_app["app_url"], "/admin/redis-metrics/")
+        self.assertEqual(redis_metrics_app["models"][0]["name"], "Dashboard")
+        self.assertEqual(redis_metrics_app["models"][0]["admin_url"], "/admin/redis-metrics/")

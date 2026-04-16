@@ -2,6 +2,15 @@
 
 `redis-metrics` adds a Redis monitoring dashboard directly inside Django admin.
 
+---
+
+![Dashboard](resources/dashboard.png)
+
+ ---
+![Edit](resources/edit-cache.png)
+
+---
+
 ## Features
 
 - Multi-Redis connection support
